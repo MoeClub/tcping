@@ -51,12 +51,14 @@ type Summary struct {
 	SUM      time.Duration
 	Count    int
 	ErrCount int
+	Time     time.Time
 	Lock     *sync.Mutex
 	WG       *sync.WaitGroup
 }
 
 func (p *Ping) Resolver() error {
 	var r *net.Resolver
+	var c bool
 	if DefaultDNSAddr != "" && DefaultDNSNet != "" {
 		dialer := &net.Dialer{}
 		r = &net.Resolver{
@@ -66,9 +68,11 @@ func (p *Ping) Resolver() error {
 				return dialer.DialContext(ctx, strings.ToLower(DefaultDNSNet), DefaultDNSAddr)
 			},
 		}
+		c = true
 	} else {
 		r = &net.Resolver{}
 	}
+	t := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(DefaultTimeout)*time.Second)
 	defer cancel()
 	addr, err := r.LookupHost(ctx, p.host)
@@ -78,6 +82,9 @@ func (p *Ping) Resolver() error {
 				p.addr = fmt.Sprintf("[%s]", addr[0])
 			} else {
 				p.addr = addr[0]
+			}
+			if c {
+				fmt.Printf("[DNS] [%s] %s --> %s - %s\n", DefaultDNSAddr, p.host, p.addr, time.Since(t))
 			}
 			return err
 		}
@@ -127,11 +134,10 @@ func (s *Summary) Stats() {
 	if count > 0 {
 		s.AVG = s.SUM / time.Duration(count)
 	}
-	fmt.Printf("\n[%s] Max: %s Min: %s Avg: %s Total: %d Error: %d\n\n", strings.ToUpper(s.NET), s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
+	fmt.Printf("\n[%s] Max: %s Min: %s Avg: %s Total: %d Error: %d - %s\n\n", strings.ToUpper(s.NET), s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount, time.Since(s.Time))
 }
 
 func (s *Summary) Result(ping *Ping) {
-	s.WG.Add(1)
 	defer s.WG.Done()
 	stats := ping.Ping()
 	s.Lock.Lock()
@@ -160,23 +166,25 @@ func (p *Ping) Do(s *Summary) {
 		fmt.Println(err.Error())
 		return
 	}
-	i := 0
 	defer s.Stats()
 	defer s.WG.Wait()
+	i := 0
 	for {
+		s.WG.Add(1)
 		if DefaultInterval > 0 {
 			s.Result(p)
 			time.Sleep(time.Duration(DefaultInterval) * time.Second)
 		} else {
 			go s.Result(p)
 		}
-		if DefaultCount > 0 {
+		if DefaultCount >= 0 {
 			i += 1
 			if DefaultCount <= i {
 				break
 			}
 		}
 	}
+	return
 }
 
 func init() {
@@ -231,6 +239,7 @@ func main() {
 	}
 	summary := &Summary{
 		NET:  ping.net,
+		Time: time.Now(),
 		Lock: &sync.Mutex{},
 		WG:   &sync.WaitGroup{},
 	}
