@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -30,7 +31,6 @@ type Ping struct {
 	host    string
 	addr    string
 	port    int
-	dialer  *net.Dialer
 	timeout int
 }
 
@@ -51,6 +51,8 @@ type Summary struct {
 	SUM      time.Duration
 	Count    int
 	ErrCount int
+	Lock     *sync.Mutex
+	WG       *sync.WaitGroup
 }
 
 func (p *Ping) Resolver() error {
@@ -101,13 +103,13 @@ func (p *Ping) Ping() *Stats {
 	if p.net == "" {
 		p.net = DefaultNet
 	}
-	p.dialer = &net.Dialer{
+	dialer := &net.Dialer{
 		Timeout: time.Duration(p.timeout) * time.Second,
 	}
 	stats.Host = p.host
 	stats.DAddr = fmt.Sprintf("%s:%d", p.addr, p.port)
 	stats.Time = time.Now()
-	conn, err := p.dialer.DialContext(context.Background(), p.net, stats.DAddr)
+	conn, err := dialer.DialContext(context.Background(), p.net, stats.DAddr)
 	stats.Duration = time.Since(stats.Time)
 	if conn != nil {
 		defer conn.Close()
@@ -128,6 +130,30 @@ func (s *Summary) Stats() {
 	fmt.Printf("\n[%s] Max: %s Min: %s Avg: %s Total: %d Error: %d\n\n", strings.ToUpper(s.NET), s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
 }
 
+func (s *Summary) Result(ping *Ping) {
+	s.WG.Add(1)
+	defer s.WG.Done()
+	stats := ping.Ping()
+	s.Lock.Lock()
+	s.Count += 1
+	if stats.Error == nil {
+		fmt.Printf("[%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05"), stats.SAddr, stats.DAddr, stats.Duration)
+		if s.MIN > stats.Duration || s.MIN == 0 {
+			s.MIN = stats.Duration
+		}
+		if s.MAX < stats.Duration {
+			s.MAX = stats.Duration
+		}
+
+		s.SUM += stats.Duration
+	} else {
+		s.ErrCount += 1
+		fmt.Printf("[%s] %s:%d - %s\n", stats.Time.Format("2006/01/02 15:04:05"), ping.host, ping.port, stats.Error.Error())
+	}
+	s.Lock.Unlock()
+	return
+}
+
 func (p *Ping) Do(s *Summary) {
 	err := p.Resolver()
 	if err != nil {
@@ -135,33 +161,20 @@ func (p *Ping) Do(s *Summary) {
 		return
 	}
 	i := 0
-	//s := &Summary{}
 	defer s.Stats()
+	defer s.WG.Wait()
 	for {
-		stats := p.Ping()
-		s.Count += 1
-		if stats.Error == nil {
-			fmt.Printf("[%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05"), stats.SAddr, stats.DAddr, stats.Duration)
-			if s.MIN > stats.Duration || s.MIN == 0 {
-				s.MIN = stats.Duration
-			}
-			if s.MAX < stats.Duration {
-				s.MAX = stats.Duration
-			}
-
-			s.SUM += stats.Duration
+		if DefaultInterval > 0 {
+			s.Result(p)
+			time.Sleep(time.Duration(DefaultInterval) * time.Second)
 		} else {
-			s.ErrCount += 1
-			fmt.Printf("[%s] %s:%d - %s\n", stats.Time.Format("2006/01/02 15:04:05"), p.host, p.port, stats.Error.Error())
+			go s.Result(p)
 		}
 		if DefaultCount > 0 {
 			i += 1
 			if DefaultCount <= i {
 				break
 			}
-		}
-		if DefaultInterval > 0 {
-			time.Sleep(time.Duration(DefaultInterval) * time.Second)
 		}
 	}
 }
@@ -199,7 +212,7 @@ func init() {
 	}
 }
 
-func InterruptHandler(s *Summary) {
+func (s *Summary) Interrupt() {
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -217,8 +230,10 @@ func main() {
 		timeout: DefaultTimeout,
 	}
 	summary := &Summary{
-		NET: ping.net,
+		NET:  ping.net,
+		Lock: &sync.Mutex{},
+		WG:   &sync.WaitGroup{},
 	}
-	InterruptHandler(summary)
+	summary.Interrupt()
 	ping.Do(summary)
 }
