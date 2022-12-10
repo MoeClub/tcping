@@ -44,6 +44,7 @@ type Stats struct {
 }
 
 type Summary struct {
+	NET      string
 	MAX      time.Duration
 	MIN      time.Duration
 	AVG      time.Duration
@@ -60,7 +61,7 @@ func (p *Ping) Resolver() error {
 			PreferGo:     true,
 			StrictErrors: false,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				return dialer.DialContext(ctx, DefaultDNSNet, DefaultDNSAddr)
+				return dialer.DialContext(ctx, strings.ToLower(DefaultDNSNet), DefaultDNSAddr)
 			},
 		}
 	} else {
@@ -121,7 +122,7 @@ func (p *Ping) Ping() *Stats {
 
 func (s *Summary) Stats() {
 	s.AVG = s.SUM / time.Duration(s.Count-s.ErrCount)
-	fmt.Printf("\nMax: %s Min: %s Avg: %s Total: %d Error: %d\n\n", s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
+	fmt.Printf("\n[%s] Max: %s Min: %s Avg: %s Total: %d Error: %d\n\n", strings.ToUpper(s.NET), s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
 }
 
 func (p *Ping) Do(s *Summary) {
@@ -132,12 +133,12 @@ func (p *Ping) Do(s *Summary) {
 	}
 	i := 0
 	//s := &Summary{}
-	//defer s.Stats()
+	defer s.Stats()
 	for {
 		stats := p.Ping()
 		s.Count += 1
 		if stats.Error == nil {
-			fmt.Printf("[%s] [%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05"), strings.ToUpper(p.net), stats.SAddr, stats.DAddr, stats.Duration)
+			fmt.Printf("[%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05"), stats.SAddr, stats.DAddr, stats.Duration)
 			if s.MIN > stats.Duration || s.MIN == 0 {
 				s.MIN = stats.Duration
 			}
@@ -148,7 +149,7 @@ func (p *Ping) Do(s *Summary) {
 			s.SUM += stats.Duration
 		} else {
 			s.ErrCount += 1
-			fmt.Printf("[%s] [%s] %s:%d - %s\n", stats.Time.Format("2006/01/02 15:04:05.999"), strings.ToUpper(p.net), p.host, p.port, stats.Error.Error())
+			fmt.Printf("[%s] %s:%d - %s\n", stats.Time.Format("2006/01/02 15:04:05"), p.host, p.port, stats.Error.Error())
 		}
 		if DefaultCount > 0 {
 			i += 1
@@ -212,7 +213,9 @@ func main() {
 		port:    DefaultPort,
 		timeout: DefaultTimeout,
 	}
-	summary := &Summary{}
+	summary := &Summary{
+		NET: ping.net,
+	}
 	InterruptHandler(summary)
 	ping.Do(summary)
 }
