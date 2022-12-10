@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -172,11 +173,23 @@ func init() {
 	flag.IntVar(&DefaultPort, "p", 80, "Default TCP Port.")
 	flag.Parse()
 
-	if DefaultHost == "" && flag.NArg() == 1 {
-		DefaultHost = flag.Args()[0]
+	if DefaultHost == "" {
+		switch flag.NArg() {
+		case 1:
+			DefaultHost = flag.Args()[0]
+		case 2:
+			DefaultHost = flag.Args()[0]
+			prot, err := strconv.Atoi(flag.Args()[1])
+			if err != nil {
+				DefaultHost = ""
+			}
+			DefaultPort = prot
+		default:
+			DefaultHost = ""
+		}
 	}
 
-	if DefaultHost == "" {
+	if DefaultHost == "" || DefaultPort == 0 {
 		fmt.Printf("Use '-h' to set host, '-p' to set port.\n")
 		os.Exit(127)
 	}
