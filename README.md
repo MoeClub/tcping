@@ -8,6 +8,6 @@ case `uname -m` in aarch64|arm64) VER="arm64";; x86_64|amd64) VER="amd64";; *) V
 
 ./tcping -i -1 -c 1000 baidu.com 443
 
-./tcping -c 0 -dns 8.8.8.8:53 baidu.com 443
+./tcping -c 0 -dns 8.8.8.8:53 baidu.com
 
 ```
