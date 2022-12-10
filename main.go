@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -118,18 +120,18 @@ func (p *Ping) Ping() *Stats {
 
 func (s *Summary) Stats() {
 	s.AVG = s.SUM / time.Duration(s.Count-s.ErrCount)
-	fmt.Printf("\nMax: %s Min: %s Avg: %s Total: %d Error: %d\n", s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
+	fmt.Printf("\nMax: %s Min: %s Avg: %s Total: %d Error: %d\n\n", s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
 }
 
-func (p *Ping) Do() {
+func (p *Ping) Do(s *Summary) {
 	err := p.Resolver()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 	i := 0
-	s := &Summary{}
-	defer s.Stats()
+	//s := &Summary{}
+	//defer s.Stats()
 	for {
 		stats := p.Ping()
 		s.Count += 1
@@ -176,8 +178,18 @@ func init() {
 
 	if DefaultHost == "" {
 		fmt.Printf("Use '-h' to set host, '-p' to set port.\n")
-		os.Exit(1)
+		os.Exit(127)
 	}
+}
+
+func InterruptHandler(s *Summary) {
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		s.Stats()
+		os.Exit(1)
+	}()
 }
 
 func main() {
@@ -187,5 +199,7 @@ func main() {
 		port:    DefaultPort,
 		timeout: DefaultTimeout,
 	}
-	ping.Do()
+	summary := &Summary{}
+	InterruptHandler(summary)
+	ping.Do(summary)
 }
