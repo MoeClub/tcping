@@ -170,18 +170,18 @@ func (p *Ping) Do(s *Summary) {
 	defer s.WG.Wait()
 	i := 0
 	for {
+		if DefaultCount >= 0 {
+			i += 1
+			if DefaultCount < i {
+				break
+			}
+		}
 		s.WG.Add(1)
 		if DefaultInterval > 0 {
 			s.Result(p)
 			time.Sleep(time.Duration(DefaultInterval) * time.Second)
 		} else {
 			go s.Result(p)
-		}
-		if DefaultCount >= 0 {
-			i += 1
-			if DefaultCount <= i {
-				break
-			}
 		}
 	}
 	return
