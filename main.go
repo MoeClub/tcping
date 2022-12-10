@@ -121,7 +121,10 @@ func (p *Ping) Ping() *Stats {
 }
 
 func (s *Summary) Stats() {
-	s.AVG = s.SUM / time.Duration(s.Count-s.ErrCount)
+	count := s.Count - s.ErrCount
+	if count > 0 {
+		s.AVG = s.SUM / time.Duration(count)
+	}
 	fmt.Printf("\n[%s] Max: %s Min: %s Avg: %s Total: %d Error: %d\n\n", strings.ToUpper(s.NET), s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
 }
 
