@@ -40,6 +40,15 @@ type Stats struct {
 	Error    error
 }
 
+type Summary struct {
+	MAX      time.Duration
+	MIN      time.Duration
+	AVG      time.Duration
+	SUM      time.Duration
+	Count    int
+	ErrCount int
+}
+
 func (p *Ping) Resolver() error {
 	var r *net.Resolver
 	if DefaultDNSAddr != "" && DefaultDNSNet != "" {
@@ -107,6 +116,11 @@ func (p *Ping) Ping() *Stats {
 	return stats
 }
 
+func (s *Summary) Stats() {
+	s.AVG = s.SUM / time.Duration(s.Count-s.ErrCount)
+	fmt.Printf("\nMax: %s Min: %s Avg: %s Total: %d Error: %d\n", s.MAX, s.MIN, s.AVG, s.Count, s.ErrCount)
+}
+
 func (p *Ping) Do() {
 	err := p.Resolver()
 	if err != nil {
@@ -114,11 +128,23 @@ func (p *Ping) Do() {
 		return
 	}
 	i := 0
+	s := &Summary{}
+	defer s.Stats()
 	for {
 		stats := p.Ping()
+		s.Count += 1
 		if stats.Error == nil {
-			fmt.Printf("[%s] [%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05.999"), strings.ToUpper(p.net), stats.SAddr, stats.DAddr, stats.Duration)
+			fmt.Printf("[%s] [%s] %s --> %s - %s\n", stats.Time.Format("2006/01/02 15:04:05"), strings.ToUpper(p.net), stats.SAddr, stats.DAddr, stats.Duration)
+			if s.MIN > stats.Duration || s.MIN == 0 {
+				s.MIN = stats.Duration
+			}
+			if s.MAX < stats.Duration {
+				s.MAX = stats.Duration
+			}
+
+			s.SUM += stats.Duration
 		} else {
+			s.ErrCount += 1
 			fmt.Printf("[%s] [%s] %s:%d - %s\n", stats.Time.Format("2006/01/02 15:04:05.999"), strings.ToUpper(p.net), p.host, p.port, stats.Error.Error())
 		}
 		if DefaultCount > 0 {
@@ -156,7 +182,7 @@ func init() {
 
 func main() {
 	ping := Ping{
-		net:     DefaultNet,
+		net:     strings.ToLower(DefaultNet),
 		host:    DefaultHost,
 		port:    DefaultPort,
 		timeout: DefaultTimeout,
