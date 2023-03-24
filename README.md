@@ -1,6 +1,6 @@
 # tcping
 ```
-case `uname -m` in aarch64|arm64) VER="arm64";; x86_64|amd64) VER="amd64";; *) VER=`read -p "Arch:"`;; esac; wget -qO ./tcping "https://raw.githubusercontent.com/MoeClub/tcping/main/${VER}/linux/tcping" && chmod a+x ./tcping
+case `uname -m` in aarch64|arm64) VER="arm64";; x86_64|amd64) VER="amd64";; *) VER=`read -p "Arch:"`;; esac; wget -qO /usr/local/bin/tcping "https://raw.githubusercontent.com/MoeClub/tcping/main/${VER}/linux/tcping" && chmod a+x /usr/local/bin/tcping
 
 ./tcping -i 1 -w 1 google.com 443
 ./tcping -h
